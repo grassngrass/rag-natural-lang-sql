@@ -1,4 +1,14 @@
-import ollama
+try:
+    import ollama
+except ImportError:
+    class _OllamaStub:
+        @staticmethod
+        def chat(*args, **kwargs):
+            raise RuntimeError(
+                "The 'ollama' package is not installed. Install it with pip and try again."
+            )
+
+    ollama = _OllamaStub()
 import pyodbc
 import sqlparse
 import re
@@ -33,9 +43,42 @@ while True:
     if question.lower() == "exit":
         break
 
+    question_lower = question.lower()
+
+    # ==================================
+    # TABLE BOOSTING
+    # ==================================
+
+    search_query = question
+
+    if "order" in question_lower:
+        search_query += " Order Details Orders"
+
+    if "product" in question_lower:
+        search_query += " Products Order Details"
+
+    if "supplier" in question_lower:
+        search_query += " Suppliers"
+
+    if "employee" in question_lower:
+        search_query += " Employees"
+
+    if "customer" in question_lower:
+        search_query += " Customers"
+
+    if "territory" in question_lower:
+        search_query += " Territories"
+
+    if "region" in question_lower:
+        search_query += " Region"
+
+    # ==================================
+    # RAG SEARCH
+    # ==================================
+
     docs = vectordb.similarity_search(
-        question,
-        k=5
+        search_query,
+        k=10
     )
 
     schema_context = "\n".join(
@@ -55,6 +98,50 @@ STRICT RULES:
 - ONLY SELECT queries
 - Return ALL matching rows unless user explicitly asks for TOP or LIMIT
 - Use exact requested columns
+- NEVER invent tables
+- NEVER invent columns
+- Use ONLY tables from schema context
+- Return ALL matching rows unless TOP is requested
+- Use exact requested columns
+- Distinguish carefully between table names and column names
+- Do not use table names as columns
+- Do not perform JOINs unless columns from multiple tables are requested.
+- If all requested columns exist in one table, query only that table.
+- Verify join column data types are compatible.
+- Use only actual columns from schema.
+- EmployeeName is not a real column.
+- For full employee names use:
+  FirstName + ' ' + LastName AS EmployeeName
+- Do not reference aliases in WHERE clauses.
+IMPORTANT:
+- Use exact table names from schema.
+- Some table names contain spaces.
+- Wrap table names containing spaces in square brackets.
+- Example:
+  [Order Details]
+  [CustomerCustomerDemo]
+  IMPORTANT TABLE RULES:
+
+- ProductID + OrderID => use [Order Details]
+- OrderID does NOT exist in Products
+- ProductID exists in Products and [Order Details]
+- Supplier questions => use Suppliers table
+- Employee questions => use Employees table
+- Territory questions => use Territories table
+- Region questions => use Region table
+COLUMN RELATIONSHIP RULES:
+
+- If a question requires both OrderID and ProductID, use [Order Details].
+- ProductID does not exist in Orders.
+- OrderID does not exist in Products.
+- [Order Details] contains both OrderID and ProductID.
+- Before generating SQL, verify every requested column exists in the selected table.
+JOIN RULES:
+
+- Do NOT use JOIN unless columns from multiple tables are requested.
+- If all requested columns exist in one table, query only that table.
+- Country filters should use Country columns, not Region tables.
+- Verify every column exists before generating SQL.
 
 Correct Example:
 SELECT TOP 1 Country
@@ -83,6 +170,15 @@ User Question:
     sql_query = sql_query.replace("```sql", "")
     sql_query = sql_query.replace("```", "")
     sql_query = sql_query.strip()
+    sql_query = sql_query.replace(
+        "OrderDetails",
+        "[Order Details]"
+    )
+
+    sql_query = sql_query.replace(
+        "Order_Details",
+        "[Order Details]"
+    )
 
     sql_query = sql_query.replace(
         "LIMIT TOP",
@@ -113,9 +209,6 @@ User Question:
                 f"SELECT TOP {limit_num}",
                 1
             )
-
-    print("\nGenerated SQL:\n")
-    print(sql_query)
 
     parsed = sqlparse.parse(sql_query)
 
@@ -219,7 +312,6 @@ Now generate insight for:
         print("=" * 50)
 
         print("\n" + summary)
-
     except Exception as e:
 
         print("\nExecution Error:")
