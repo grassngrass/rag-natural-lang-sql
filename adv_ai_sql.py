@@ -196,6 +196,49 @@ SELECT ProductName
 FROM Products
 WHERE ProductID = 11
 
+IMPORTANT TABLE RULES:
+
+- ProductID belongs to [Order Details] and Products tables.
+- Orders table does NOT contain ProductID.
+- If a question contains both OrderID and ProductID,
+  use [Order Details].
+Products.SupplierID joins Suppliers.SupplierID.
+
+To find supplier information for a product:
+
+SELECT S.SupplierID, S.CompanyName
+FROM Products P
+JOIN Suppliers S
+ON P.SupplierID = S.SupplierID
+
+ProductID belongs to Products.
+SupplierID belongs to Suppliers.
+
+Never use:
+- BusinessEntityID
+- EmployeeTerritories
+- Orders
+
+when answering supplier-for-product questions.
+
+Examples:
+
+Question:
+What is the ProductID for OrderID 10248?
+
+SQL:
+SELECT ProductID
+FROM [Order Details]
+WHERE OrderID = 10248
+
+Question:
+What products were ordered in OrderID 10248?
+
+SQL:
+SELECT ProductID
+FROM [Order Details]
+WHERE OrderID = 10248
+
 Database Schema:
 {schema_context}
 

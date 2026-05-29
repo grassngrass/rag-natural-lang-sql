@@ -179,11 +179,32 @@ Important Rules:
 - Wrap tables containing spaces with [].
 - Use exact table names.
 
+
 Example Queries:
 
 SELECT * FROM [{table_name}]
 
 SELECT TOP 10 * FROM [{table_name}]
+"""
+if table_name == "Order Details":
+
+    doc_text += """
+
+Business Meaning:
+
+- Each Order can contain multiple Products.
+- OrderID exists in Orders and Order Details.
+- ProductID exists in Order Details and Products.
+- To find products for an order, use Order Details.
+- Orders table does not contain ProductID.
+
+Examples:
+
+What products are in OrderID 10248?
+-> Use Order Details
+
+What is ProductID for OrderID 10248?
+-> Use Order Details
 """
 
 schema_docs.append(
