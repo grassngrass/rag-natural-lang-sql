@@ -1,0 +1,15 @@
+{
+    "Employees": [],
+    "Orders": [],
+    "EmployeeTerritories": [
+        {
+            "column": "TerritoryID",
+            "ref_table": "Territories",
+            "ref_column": "TerritoryID"
+        }
+    ],
+    "Products": [],
+    "CustomerCustomerDemo": [],
+    "OrderDetails": [],
+    "Territories": []
+}

@@ -9,6 +9,7 @@ except ImportError:
             )
 
     ollama = _OllamaStub()
+import json
 import pyodbc
 import sqlparse
 import re
@@ -35,6 +36,12 @@ vectordb = Chroma(
     persist_directory="./chroma_db",
     embedding_function=embedding
 )
+with open(
+    "relationship_graph.json",
+    "r"
+) as f:
+
+    relationship_graph = json.load(f)
 
 while True:
 
@@ -44,6 +51,34 @@ while True:
         break
 
     question_lower = question.lower()
+    # Detect ID filters
+    id_hint = ""
+
+    id_match = re.search(
+        r'(\w+)\s*id\s*(\d+)',
+        question,
+        re.IGNORECASE
+    )
+
+    if id_match:
+
+        id_hint = """
+IMPORTANT:
+The user specified a specific ID value.
+Use a WHERE clause.
+Do NOT return all rows.
+
+Examples:
+
+OrderID 10248
+-> WHERE OrderID = 10248
+
+ProductID 11
+-> WHERE ProductID = 11
+
+EmployeeID 5
+-> WHERE EmployeeID = 5
+"""
 
     # ==================================
     # TABLE BOOSTING
@@ -78,84 +113,98 @@ while True:
 
     docs = vectordb.similarity_search(
         search_query,
-        k=10
+        k=15
     )
 
     schema_context = "\n".join(
         [doc.page_content for doc in docs]
     )
+
+    # BUILD RELATIONSHIP CONTEXT
+    join_context = ""
+
+    for table_name, joins in relationship_graph.items():
+
+        for join in joins:
+
+            join_context += (
+                f"{table_name}.{join['column']} "
+                f"joins "
+                f"{join['ref_table']}."
+                f"{join['ref_column']}\n"
+            )
+
     prompt = f"""
+You are an expert SQL Server query generator.
+
+RULES:
+
+1. Use ONLY SQL Server syntax.
+2. Use ONLY tables from schema.
+3. Use ONLY columns from schema.
+4. Never invent tables.
+5. Never invent columns.
+6. Use JOINs only when needed.
+7. Follow provided relationships.
+8. Return ONLY SQL.
+9. No markdown.
+10. No explanation.
+11. SELECT queries only.
 STRICT RULES:
 - ONLY generate valid SQL Server syntax
-- NEVER use LIMIT
-- SQL Server uses TOP
 - NEVER invent columns
-- ONLY use columns from schema
-- Output ONLY raw SQL
-- No explanation
-- No markdown
-- No comments
-- ONLY SELECT queries
-- Return ALL matching rows unless user explicitly asks for TOP or LIMIT
-- Use exact requested columns
-- NEVER invent tables
-- NEVER invent columns
-- Use ONLY tables from schema context
-- Return ALL matching rows unless TOP is requested
-- Use exact requested columns
-- Distinguish carefully between table names and column names
-- Do not use table names as columns
-- Do not perform JOINs unless columns from multiple tables are requested.
-- If all requested columns exist in one table, query only that table.
-- Verify join column data types are compatible.
-- Use only actual columns from schema.
-- EmployeeName is not a real column.
-- For full employee names use:
-  FirstName + ' ' + LastName AS EmployeeName
-- Do not reference aliases in WHERE clauses.
+- ONLY use schema columns
 IMPORTANT:
-- Use exact table names from schema.
-- Some table names contain spaces.
-- Wrap table names containing spaces in square brackets.
-- Example:
-  [Order Details]
-  [CustomerCustomerDemo]
-  IMPORTANT TABLE RULES:
 
-- ProductID + OrderID => use [Order Details]
-- OrderID does NOT exist in Products
-- ProductID exists in Products and [Order Details]
-- Supplier questions => use Suppliers table
-- Employee questions => use Employees table
-- Territory questions => use Territories table
-- Region questions => use Region table
-COLUMN RELATIONSHIP RULES:
+When columns belong to different tables,
+find a join path using the relationship graph.
 
-- If a question requires both OrderID and ProductID, use [Order Details].
-- ProductID does not exist in Orders.
-- OrderID does not exist in Products.
-- [Order Details] contains both OrderID and ProductID.
-- Before generating SQL, verify every requested column exists in the selected table.
-JOIN RULES:
+Example:
+Orders.ShipVia joins Shippers.ShipperID
 
-- Do NOT use JOIN unless columns from multiple tables are requested.
-- If all requested columns exist in one table, query only that table.
-- Country filters should use Country columns, not Region tables.
-- Verify every column exists before generating SQL.
+To get OrderID and CompanyName:
 
-Correct Example:
-SELECT TOP 1 Country
-FROM Customers
-GROUP BY Country
-ORDER BY COUNT(CustomerID) DESC
+SELECT O.OrderID, S.CompanyName
+FROM Orders O
+JOIN Shippers S
+ON O.ShipVia = S.ShipperID
+
+IMPORTANT:
+
+If the user specifies an ID value
+(OrderID, ProductID, CustomerID, EmployeeID, etc.)
+
+ALWAYS include a WHERE clause.
+
+Examples:
+
+User:
+What is the shipper company name for Order ID 10248?
+
+SQL:
+SELECT S.CompanyName
+FROM Orders O
+JOIN Shippers S
+ON O.ShipVia = S.ShipperID
+WHERE O.OrderID = 10248
+
+User:
+What is the product name for ProductID 11?
+
+SQL:
+SELECT ProductName
+FROM Products
+WHERE ProductID = 11
 
 Database Schema:
 {schema_context}
 
+Relationships:
+{join_context}
+
 User Question:
 {question}
 """
-
     response = ollama.chat(
         model='llama3.2',
         messages=[
@@ -214,6 +263,7 @@ User Question:
 
     if not parsed:
         print("Invalid SQL")
+        # skip this iteration of the main input loop
         continue
 
     forbidden = [
@@ -316,3 +366,100 @@ Now generate insight for:
 
         print("\nExecution Error:")
         print(e)
+
+        error_message = str(e)
+
+        retry_prompt = f"""
+The SQL query failed.
+
+Error:
+{error_message}
+
+Original SQL:
+{sql_query}
+
+Schema:
+{schema_context}
+
+Relationships:
+{join_context}
+
+Generate corrected SQL only.
+"""
+
+        retry_response = ollama.chat(
+            model="llama3.2",
+            messages=[
+                {
+                    "role": "user",
+                    "content": retry_prompt
+                }
+            ]
+        )
+
+        corrected_sql = (
+            retry_response["message"]["content"]
+            .replace("```sql", "")
+            .replace("```", "")
+            .strip()
+        )
+
+        print("\nCorrected SQL:")
+        print(corrected_sql)
+
+        retry_prompt = f"""
+You are a SQL Server query fixer.
+
+RULES:
+- Return ONLY SQL.
+- No explanation.
+- No markdown.
+- No comments.
+- No English text.
+- One SQL query only.
+
+Database Schema:
+{schema_context}
+
+Relationships:
+{join_context}
+
+Failed SQL:
+{sql_query}
+
+Error:
+{error_message}
+
+Generate corrected SQL only.
+"""
+
+        retry_response = ollama.chat(
+            model="llama3.2",
+            messages=[
+                {
+                    "role": "user",
+                    "content": retry_prompt
+                }
+            ]
+        )
+
+        corrected_sql = (
+            retry_response["message"]["content"]
+            .replace("```sql", "")
+            .replace("```", "")
+            .strip()
+        )
+
+        import re
+
+        match = re.search(
+            r"(SELECT[\s\S]*)",
+            corrected_sql,
+            re.IGNORECASE
+        )
+
+        if match:
+            corrected_sql = match.group(1).strip()
+
+        print("\nCorrected SQL:")
+        print(corrected_sql)

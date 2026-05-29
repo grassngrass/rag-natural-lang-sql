@@ -1,4 +1,5 @@
 import pyodbc
+import json
 
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
@@ -60,6 +61,7 @@ JOIN sys.columns cr
 """)
 
 relationships = cursor.fetchall()
+relationship_graph = {}
 
 schema_docs = []
 
@@ -110,25 +112,33 @@ for table in tables:
         parent_column = rel[1]
         referenced_table = rel[2]
         referenced_column = rel[3]
+        
+        if parent_table not in relationship_graph:
 
-        if parent_table == table_name:
+            relationship_graph[parent_table] = []
+
+relationship_graph[parent_table].append({
+    "column": parent_column,
+    "ref_table": referenced_table,
+    "ref_column": referenced_column
+})
+
+if parent_table == table_name:
 
             relationship_text += (
                 f"- {parent_table}.{parent_column} "
                 f"joins "
                 f"{referenced_table}.{referenced_column}\n"
             )
-
-    if relationship_text == "":
+if relationship_text == "":
         relationship_text = "No foreign key relationships found."
 
     # ======================================
     # TABLE NAME HINTS
     # ======================================
 
-    table_hint = ""
-
-    if " " in table_name:
+table_hint = ""
+if " " in table_name:
 
         table_hint = f"""
 IMPORTANT:
@@ -147,7 +157,7 @@ Always use square brackets.
     # DOCUMENT
     # ======================================
 
-    doc_text = f"""
+doc_text = f"""
 Table: [{table_name}]
 
 Columns:
@@ -176,7 +186,7 @@ SELECT * FROM [{table_name}]
 SELECT TOP 10 * FROM [{table_name}]
 """
 
-    schema_docs.append(
+schema_docs.append(
         Document(
             page_content=doc_text
         )
@@ -198,6 +208,16 @@ db = Chroma.from_documents(
     embedding=embedding,
     persist_directory="./chroma_db"
 )
+with open(
+    "relationship_graph.json",
+    "w"
+) as f:
+
+    json.dump(
+        relationship_graph,
+        f,
+        indent=4
+    )
 
 print("\n====================================")
 print("Schema + Relationships Loaded")
