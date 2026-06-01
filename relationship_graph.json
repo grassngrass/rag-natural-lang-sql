@@ -1,15 +1,81 @@
 {
-    "Employees": [],
-    "Orders": [],
+    "Employees": [
+        {
+            "column": "ReportsTo",
+            "ref_table": "Employees",
+            "ref_column": "EmployeeID"
+        }
+    ],
+    "Orders": [
+        {
+            "column": "EmployeeID",
+            "ref_table": "Employees",
+            "ref_column": "EmployeeID"
+        },
+        {
+            "column": "CustomerID",
+            "ref_table": "Customers",
+            "ref_column": "CustomerID"
+        },
+        {
+            "column": "ShipVia",
+            "ref_table": "Shippers",
+            "ref_column": "ShipperID"
+        }
+    ],
     "EmployeeTerritories": [
+        {
+            "column": "EmployeeID",
+            "ref_table": "Employees",
+            "ref_column": "EmployeeID"
+        },
         {
             "column": "TerritoryID",
             "ref_table": "Territories",
             "ref_column": "TerritoryID"
         }
     ],
-    "Products": [],
-    "CustomerCustomerDemo": [],
-    "OrderDetails": [],
-    "Territories": []
+    "Products": [
+        {
+            "column": "CategoryID",
+            "ref_table": "Categories",
+            "ref_column": "CategoryID"
+        },
+        {
+            "column": "SupplierID",
+            "ref_table": "Suppliers",
+            "ref_column": "SupplierID"
+        }
+    ],
+    "CustomerCustomerDemo": [
+        {
+            "column": "CustomerID",
+            "ref_table": "Customers",
+            "ref_column": "CustomerID"
+        },
+        {
+            "column": "CustomerTypeID",
+            "ref_table": "CustomerDemographics",
+            "ref_column": "CustomerTypeID"
+        }
+    ],
+    "OrderDetails": [
+        {
+            "column": "OrderID",
+            "ref_table": "Orders",
+            "ref_column": "OrderID"
+        },
+        {
+            "column": "ProductID",
+            "ref_table": "Products",
+            "ref_column": "ProductID"
+        }
+    ],
+    "Territories": [
+        {
+            "column": "RegionID",
+            "ref_table": "Region",
+            "ref_column": "RegionID"
+        }
+    ]
 }

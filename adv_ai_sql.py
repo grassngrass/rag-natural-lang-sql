@@ -154,7 +154,48 @@ STRICT RULES:
 - ONLY generate valid SQL Server syntax
 - NEVER invent columns
 - ONLY use schema columns
+- If using GROUP BY, NEVER use DISTINCT.
+- For highest, lowest, top, maximum, minimum queries:
+  use GROUP BY + ORDER BY aggregate DESC/ASC.
+- For "highest" or "top" questions use TOP 1.
+- Never combine DISTINCT and GROUP BY.
+- COUNT results should be aliased (example: COUNT(*) AS TotalCount).
+SQL SERVER RULES:
+
+- SQL Server uses TOP.
+- Never use FETCH TOP.
+- Never use LIMIT.
+- For highest/lowest/top/most queries:
+  use SELECT TOP 1.
+DATE RULES:
+
+- There is no Year table.
+- There is no Month table.
+- There is no Date table.
+
+Use:
+
+YEAR(OrderDate)
+MONTH(OrderDate)
+DAY(OrderDate)
+DATENAME(MONTH, OrderDate)
+
+for date analysis.
 IMPORTANT:
+JOIN RULES:
+
+Use relationship graph to find join paths.
+
+Orders -> Customers
+Orders -> Employees
+Orders -> Shippers
+Products -> Suppliers
+Products -> Categories
+EmployeeTerritories -> Employees
+EmployeeTerritories -> Territories
+Territories -> Region
+OrderDetails -> Orders
+OrderDetails -> Products
 
 When columns belong to different tables,
 find a join path using the relationship graph.
@@ -239,6 +280,26 @@ SELECT ProductID
 FROM [Order Details]
 WHERE OrderID = 10248
 
+
+Examples:
+
+Which month has highest orders?
+
+SELECT TOP 1
+    DATENAME(MONTH, OrderDate) AS MonthName,
+    COUNT(*) AS TotalOrders
+FROM Orders
+GROUP BY DATENAME(MONTH, OrderDate)
+ORDER BY TotalOrders DESC
+
+Which year has highest orders?
+
+SELECT TOP 1
+    YEAR(OrderDate) AS OrderYear,
+    COUNT(*) AS TotalOrders
+FROM Orders
+GROUP BY YEAR(OrderDate)
+ORDER BY TotalOrders DESC
 Database Schema:
 {schema_context}
 
@@ -276,31 +337,52 @@ User Question:
         "LIMIT TOP",
         "TOP"
     )
+    # Fix invalid FETCH TOP syntax
+    sql_query = re.sub(
+        r'FETCH\s+TOP\s+(\d+)',
+        '',
+        sql_query,
+        flags=re.IGNORECASE
+    )
 
-    if "LIMIT" in sql_query.upper():
-
-        match = re.search(
-            r'LIMIT\s+(\d+)',
-            sql_query,
-            re.IGNORECASE
-        )
-
-        if match:
-
-            limit_num = match.group(1)
-
-            sql_query = re.sub(
-                r'LIMIT\s+\d+',
-                '',
-                sql_query,
-                flags=re.IGNORECASE
-            )
+    if (
+        "highest" in question_lower
+        or "top" in question_lower
+        or "most" in question_lower
+    ):
+        if "TOP" not in sql_query.upper():
 
             sql_query = sql_query.replace(
                 "SELECT",
-                f"SELECT TOP {limit_num}",
+                "SELECT TOP 1",
                 1
             )
+        
+
+        if "LIMIT" in sql_query.upper():
+
+            match = re.search(
+                r'LIMIT\s+(\d+)',
+                sql_query,
+                re.IGNORECASE
+            )
+
+            if match:
+
+                limit_num = match.group(1)
+
+                sql_query = re.sub(
+                    r'LIMIT\s+\d+',
+                    '',
+                    sql_query,
+                    flags=re.IGNORECASE
+                )
+
+                sql_query = sql_query.replace(
+                    "SELECT",
+                    f"SELECT TOP {limit_num}",
+                    1
+                )
 
     parsed = sqlparse.parse(sql_query)
 

@@ -103,36 +103,40 @@ for table in tables:
     # ======================================
     # RELATIONSHIPS
     # ======================================
+# ======================================
+# RELATIONSHIPS
+# ======================================
 
-    relationship_text = ""
+relationship_text = ""
 
-    for rel in relationships:
+for rel in relationships:
 
-        parent_table = rel[0]
-        parent_column = rel[1]
-        referenced_table = rel[2]
-        referenced_column = rel[3]
-        
-        if parent_table not in relationship_graph:
+    parent_table = rel[0]
+    parent_column = rel[1]
+    referenced_table = rel[2]
+    referenced_column = rel[3]
 
-            relationship_graph[parent_table] = []
+    if parent_table not in relationship_graph:
 
-relationship_graph[parent_table].append({
-    "column": parent_column,
-    "ref_table": referenced_table,
-    "ref_column": referenced_column
-})
+        relationship_graph[parent_table] = []
 
-if parent_table == table_name:
+    relationship_graph[parent_table].append({
+        "column": parent_column,
+        "ref_table": referenced_table,
+        "ref_column": referenced_column
+    })
 
-            relationship_text += (
-                f"- {parent_table}.{parent_column} "
-                f"joins "
-                f"{referenced_table}.{referenced_column}\n"
-            )
+    if parent_table == table_name:
+
+        relationship_text += (
+            f"- {parent_table}.{parent_column} "
+            f"joins "
+            f"{referenced_table}.{referenced_column}\n"
+        )
+
 if relationship_text == "":
-        relationship_text = "No foreign key relationships found."
-
+    relationship_text = "No foreign key relationships found."
+    
     # ======================================
     # TABLE NAME HINTS
     # ======================================
@@ -206,6 +210,33 @@ What products are in OrderID 10248?
 What is ProductID for OrderID 10248?
 -> Use Order Details
 """
+if table_name == "Orders":
+
+    doc_text += """
+
+Date Intelligence:
+
+OrderDate can be used for:
+
+- YEAR(OrderDate)
+- MONTH(OrderDate)
+- DAY(OrderDate)
+- DATENAME(MONTH, OrderDate)
+
+Examples:
+
+Which year has highest orders?
+-> YEAR(OrderDate)
+
+Which month has highest orders?
+-> MONTH(OrderDate)
+
+Orders in 1997?
+-> YEAR(OrderDate)=1997
+
+Orders in July?
+-> MONTH(OrderDate)=7
+"""
 
 schema_docs.append(
         Document(
@@ -233,6 +264,12 @@ with open(
     "relationship_graph.json",
     "w"
 ) as f:
+
+    json.dump(
+        relationship_graph,
+        f,
+        indent=4
+    )
 
     json.dump(
         relationship_graph,
